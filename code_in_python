@@ -1,0 +1,55 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jan 30 16:49:06 2018
+
+@author: Manish Poddar
+"""
+
+import boto3
+import pandas as pd
+
+def getSession():
+    PROFILE = input("Enter Profile Name :")
+    try :
+        session = boto3.Session(profile_name=PROFILE)
+    except(Exception):
+        print("Error  in getting session")
+    return(session)
+
+def connectToEC2(session):
+    try :
+        ec2Client=session.client("ec2")
+    except(Exception):
+        print("error in connectiong to Ec2")
+    return ec2Client
+
+def getDictOfSnapshotVolumeId(session,ec2Client):
+    myAccount = session.client('sts').get_caller_identity()['Account']
+    snapshots = ec2Client.describe_snapshots(MaxResults=1000, OwnerIds=[myAccount])['Snapshots']
+    l=[]
+    for snapshot in snapshots:
+        d={}
+        d["SnapshotId"] = snapshot["SnapshotId"]
+        d["Snap Shot Start Time"] = str(snapshot["StartTime"])
+        try :
+            d["AMI ID"] = snapshot["Description"].split(' ')[4]
+            amiid = snapshot["Description"].split(' ')[4]
+            images_filter = [{'Name': 'image-id', 'Values': [amiid]}]
+            found_images = ec2Client.describe_images(Filters=images_filter)
+            d["AMI Creation time"] = str(found_images['Images'][0]['CreationDate'])
+            d["Name"] = str(found_images['Images'][0]['Name'])
+        except(Exception):
+            pass
+        l.append(d)
+    return l
+    
+
+
+if __name__ == '__main__':
+    session = getSession()
+    ec2Client = connectToEC2(session)
+    dictOfSnapShots = getDictOfSnapshotVolumeId(session,ec2Client) #Get Snapshot dictionary
+    df = pd.DataFrame(dictOfSnapShots)
+    df.to_excel("SnapShotDetails.xlsx")
+    df.to_csv("SnapShotDetails.csv")
+    print("Connnected Successfully")
